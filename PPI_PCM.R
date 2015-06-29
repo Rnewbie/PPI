@@ -8,6 +8,11 @@ library(e1071)
 library(randomForest)
 library(nnet)
 library(Rcpi)
+library(RCurl)
+
+setwd("/Volumes/SAW SIMEON/PPI")
+
+x <- getURL("https://github.com/Rnewbie/PPI/blob/master/data.xlsx")
 
 data <- read_excel("data.xlsx")
 ## Subset the data with only reported pKd
@@ -174,47 +179,52 @@ protein_B_low <- subset(inputpartitionprotein_b, affinity == "Low")
 ### protein alone data
 protein_A_data <- rbind(protein_A_high, protein_A_low)
 protein_B_data <- rbind(protein_B_high, protein_B_low)
+protein_A_data <-  protein_A_data[,! apply(protein_A_data, 2, function(x) any(is.na(x)))]
+protein_B_data <- protein_B_data[,! apply(protein_B_data, 2, function(x) any(is.na(x)))]
+affinity <- protein_A_data$affinity
 ### cross terms data
 p_A_data <- protein_A_data[-1]
 p_B_data <- protein_B_data[-1]
 crossTerms <- getCPI(p_A_data, p_B_data, type = "tensorprod")
 crossTerms <- as.data.frame(crossTerms)
-df_protein_A <- names(data.frame(protein_A_data[,2:50]))
-df_protein_B <- names(data.frame(protein_B_data[,2:55]))
-protein_A_Namecross <- rep(df_protein_A, each=54)
-Protein_B_Namecross <- rep(df_protein_B,times=49)
+df_protein_A <- names(data.frame(protein_A_data[,2:49]))
+df_protein_B <- names(data.frame(protein_B_data[,2:53]))
+protein_A_Namecross <- rep(df_protein_A, each=52)
+Protein_B_Namecross <- rep(df_protein_B,times=48)
 label <- paste(protein_A_Namecross, Protein_B_Namecross, sep="_")
 colnames(crossTerms) <- label
 cross_terms_data <- cbind(affinity, crossTerms)
 ### Protein A self cross terms
 selfcross_protein_A <- getCPI(p_A_data, p_A_data, type = "tensorprod")
-df <- names(data.frame(protein_A_data[, 2:50]))
-protein_A_name2 <- rep(df, times = 49)
-protein_A_name1 <- rep(df, each = 49)
+df <- names(data.frame(protein_A_data[, 2:49]))
+protein_A_name2 <- rep(df, times = 48)
+protein_A_name1 <- rep(df, each = 48)
 label <- paste(protein_A_name1, protein_A_name2, sep = "_")
 colnames(selfcross_protein_A) <- label
 selfcross_protein_A <- data.frame(selfcross_protein_A)
-index <- seq(1, 2401, by = 50)
+index <- seq(1, 2304, by = 49)
 selfcross_protein_A <- selfcross_protein_A[, -index]
 transposedIndex_protein_A <- t(selfcross_protein_A)
 index1 <- which(duplicated(transposedIndex_protein_A))
 removed_protein_A_train <- transposedIndex_protein_A[-index1, ]
 protein_A_finalselfcrosstrain <- t(removed_protein_A_train)
+protein_A_finalselfcrosstrain <- data.frame(protein_A_finalselfcrosstrain)
 AxA_data <- cbind(affinity, protein_A_finalselfcrosstrain)
 ## selfcross B self cross terms
 selfcross_protein_B <- getCPI(p_B_data, p_B_data, type = "tensorprod")
-df <- names(data.frame(protein_B_data[, 2:55]))
-protein_B_name2 <- rep(df, times = 54)
-protein_B_name1 <- rep(df, each = 54)
+df <- names(data.frame(protein_B_data[, 2:53]))
+protein_B_name2 <- rep(df, times = 52)
+protein_B_name1 <- rep(df, each = 52)
 label <- paste(protein_B_name1, protein_B_name2, sep = "_")
 colnames(selfcross_protein_B) <- label
 selfcross_protein_B <- data.frame(selfcross_protein_B)
-index2 <- seq(1, 2916, by = 55)
+index2 <- seq(1, 2704, by = 53)
 selfcross_protein_B <- selfcross_protein_B[, -index2]
 transposedIndex_protein_B <- t(selfcross_protein_B)
 index3 <- which(duplicated(transposedIndex_protein_B))
 removed_protein_B_train <- transposedIndex_protein_B[-index3, ]
 protein_B_finalselfcrosstrain <- t(removed_protein_B_train)
+protein_B_finalselfcrosstrain <- data.frame(protein_B_finalselfcrosstrain)
 BxB_data <- cbind(affinity, protein_B_finalselfcrosstrain)
 ## data input
 
@@ -223,33 +233,35 @@ protein_B_data
 AxA_data
 BxB_data
 A_B_data <- cbind(affinity, p_A_data, p_B_data)
-A_B_AxB_data_block_scale <- cbind(p_A_data, p_B_data, crossTerms) * (1/sqrt(2749))
+A_B_AxB_data_block_scale <- cbind(p_A_data, p_B_data, crossTerms) * (1/sqrt(length(p_A_data)+length(p_B_data)+length(crossTerms)))
 A_B_AxB_data <- cbind(affinity, A_B_AxB_data_block_scale)
 A_B_AxA_data_block_scale <- cbind(p_A_data, p_B_data, 
-                                  protein_A_finalselfcrosstrain) * (1/sqrt(1279))
+                                  protein_A_finalselfcrosstrain) * (1/sqrt(length(p_A_data)+length(p_B_data)+length(protein_A_finalselfcrosstrain)))
 A_B_AxA_data <- cbind(affinity, A_B_AxA_data_block_scale)
 A_B_BxB_data_block_scale <- cbind(p_A_data, p_B_data,
-                                  protein_B_finalselfcrosstrain) * (1/sqrt(1534))
+                                  protein_B_finalselfcrosstrain) * (1/sqrt(length(p_A_data)+length(p_B_data)+length(protein_B_finalselfcrosstrain)))
 A_B_BxB_data <- cbind(affinity, A_B_BxB_data_block_scale)
 A_B_AxB_AxA_data_block_scale <- cbind(p_A_data, p_B_data, crossTerms,
-                                      protein_A_finalselfcrosstrain) * (1/sqrt(3925))
+                                      protein_A_finalselfcrosstrain) * (1/sqrt(length(p_A_data)+length(p_B_data)+length(crossTerms)+length(protein_A_finalselfcrosstrain)))
 A_B_AxB_AxA_data <- cbind(affinity, A_B_AxB_AxA_data_block_scale)
 A_B_AxB_BxB_data_block_scale <- cbind(p_A_data, p_B_data, crossTerms,
-                                      protein_B_finalselfcrosstrain) * (1/sqrt(4180))
+                                      protein_B_finalselfcrosstrain) * (1/sqrt(length(p_A_data)+length(p_B_data)+length(crossTerms)+length(protein_B_finalselfcrosstrain)))
 A_B_AxB_BxB_data <- cbind(affinity, A_B_AxB_BxB_data_block_scale)
 A_B_AxA_BxB_data_block_scale <- cbind(p_A_data, p_B_data, protein_A_finalselfcrosstrain,
-                                      protein_B_finalselfcrosstrain) * (1/sqrt(2710))
+                                      protein_B_finalselfcrosstrain) * (1/sqrt(length(p_A_data)+length(p_B_data)+
+                                                                                 length(protein_A_finalselfcrosstrain)+length(protein_B_finalselfcrosstrain)))
 A_B_AxA_BxB_data <- cbind(affinity, A_B_AxA_BxB_data_block_scale)
 A_B_AxB_AxA_BxB_data_block_scale <- cbind(p_A_data, p_B_data, crossTerms,
                                           protein_A_finalselfcrosstrain,
-                                          protein_B_finalselfcrosstrain) * (1/sqrt(5356))
+                                          protein_B_finalselfcrosstrain) * (1/sqrt(length(p_A_data)+length(p_B_data)+
+                                                                                     length(protein_A_finalselfcrosstrain)+
+                                                                                     length(protein_B_finalselfcrosstrain)))
 A_B_AxB_AxA_BxB_data <- cbind(affinity, A_B_AxB_AxA_BxB_data_block_scale)
 
 ### data set name
 #protein_A_data
 #protein_B_data
 #cross_terms_data
-#AxA_data
 #BxB_data
 #A_B_data 
 #A_B_AxB_data 
@@ -466,7 +478,6 @@ J48_external <- function(x) {
 
 ### results for testing set
 
-testing <- J48_external(protein_A_data)
 
 protein_A_testing <- J48_external(protein_A_data)
 protein_B_testing <- J48_external(protein_B_data)
@@ -481,4 +492,78 @@ protein_A_B_AxB_AxA_testing <- J48_external(A_B_AxB_AxA_data)
 protein_A_B_AxB_BxB_testing <- J48_external(A_B_AxB_BxB_data)
 protein_A_B_AxA_BxB_testing <- J48_external(A_B_AxA_BxB_data)
 protein_A_B_AxB_AxA_BxB_testing <- J48_external(A_B_AxB_AxA_BxB_data)
+
+
+
+
+RF_training <- function(x) {
+  high <- subset(x, affinity == "High")
+  low <- subset(x, affinity =="Low")
+  results <- list(100)
+  for (i in 1:100) {
+    train_high <- sample_n(high, size = 54)
+    test_high <- sample_n(high, size = 14)
+    train_low <- sample_n(low, size = 51)
+    test_low <- sample_n(low, size = 13)
+    train <- rbind(train_high, train_low)
+    test <- rbind(test_high, test_low)
+    ctrl <- trainControl(method = "cv",  number=5,savePredictions=FALSE)
+    rf <- train(affinity~., data = train,  method = "rf", trControl = ctrl)
+    model_train <- randomForest(affinity~., data = train, mtry = rf$bestTune[[1]], ntree = 500)
+    confusionmatrix <- model_train$confusion[, 1:2]
+    results[[i]] <- as.numeric(confusionmatrix)
+  }
+  return(results)
+}
+
+### mean and SD value
+
+mean_and_sd <- function(x) {
+  c(round(mean(x, na.rm = TRUE), digits = 4),
+    round(sd(x, na.rm = TRUE), digits = 4))
+}
+
+RF_train <- function(x) {
+  ok <- RF_training(x)
+  results <- data.frame(ok)
+  data <- data.frame(results)
+  m = ncol(data)
+  ACC  <- matrix(nrow = m, ncol = 1)
+  SENS  <- matrix(nrow = m, ncol = 1)
+  SPEC  <-matrix(nrow = m, ncol = 1)
+  MCC <- matrix(nrow = m, ncol = 1)
+  
+  for(i in 1:m){ 
+    ACC[i,1]  = (data[1,i]+data[4,i])/(data[1,i]+data[2,i]+data[3,i]+data[4,i])*100
+    SENS[i,1]  =  (data[4,i])/(data[3,i]+data[4,i])*100
+    SPEC[i,1]  = (data[1,i]/(data[1,i]+data[2,i]))*100
+    MCC1      = (data[1,i]*data[4,i]) - (data[2,i]*data[3,i])
+    MCC2      =  (data[4,i]+data[2,i])*(data[4,i]+data[3,i])
+    MCC3      =  (data[1,i]+data[2,i])*(data[1,i]+data[3,i])
+    MCC4  =  sqrt(MCC2)*sqrt(MCC3)
+    
+    
+    MCC[i,1]  = MCC1/MCC4
+  }
+  results_ACC <- mean_and_sd(ACC)
+  results_SENS <- mean_and_sd(SENS)
+  results_SPEC <- mean_and_sd(SPEC)
+  results_MCC <- mean_and_sd(MCC)
+  return(data.frame(c(results_ACC, results_SENS, results_SPEC, results_MCC)))
+}
+
+random_forest_protein_A_training <- RF_train(protein_A_data)
+random_forest_protein_B_training <- RF_train(protein_B_data)
+random_forest_protein_cross_terms_training <- RF_train(cross_terms_data)
+random_forest_protein_AxA_training <- RF_train(AxA_data)
+random_forest_protein_BxB_training <- RF_train(BxB_data)
+random_forest_protein_A_B_training <- RF_train(A_B_data)
+random_forest_protein_A_B_AxB_training <- RF_train(A_B_AxB_data)
+random_forest_protein_A_B_AxA_training <- RF_train(A_B_AxA_data)
+random_forest_protein_A_B_BxB_training <- RF_train(A_B_BxB_data)
+random_forest_protein_A_B_AxB_AxA_training <- RF_train(A_B_AxB_AxA_data)
+random_forest_protein_A_B_AxB_BxB_training <- RF_train(A_B_AxB_BxB_data)
+random_forest_protein_A_B_AxA_BxB_training <- RF_train(A_B_AxA_BxB_data)
+random_forest_protein_A_B_AxB_AxA_BxB_training <- RF_train(A_B_AxB_AxA_BxB_data)
+
 
